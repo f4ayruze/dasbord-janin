@@ -5,53 +5,183 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard Monitoring Janin</title>
   
-  <!-- Memanggil Library Firebase v8 -->
+  <!-- Library Firebase -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  
+  <!-- Library Grafik (Chart.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
-    .card { border: 1px solid #ccc; border-radius: 10px; padding: 20px; width: 300px; margin: 0 auto; box-shadow: 2px 2px 10px #aaa; }
-    h1 { color: #333; }
-    .value { font-size: 2em; font-weight: bold; color: #007BFF; }
+    body { font-family: Arial, sans-serif; text-align: center; margin: 20px; background-color: #f4f7f6; }
+    .container { max-width: 800px; margin: auto; }
+    .card-container { display: flex; justify-content: space-around; margin-bottom: 20px; gap: 10px; flex-wrap: wrap; }
+    .card { background: white; border-radius: 10px; padding: 20px; width: 40%; box-shadow: 2px 2px 10px #ccc; }
+    h1 { color: #333; margin-bottom: 5px; }
+    .value { font-size: 2.5em; font-weight: bold; color: #007BFF; }
+    .chart-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 2px 2px 10px #ccc; margin-top: 20px; }
+    
+    /* Gaya untuk Tombol Download */
+    .btn-download {
+      background-color: #28a745;
+      color: white;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 15px;
+      margin-bottom: 10px;
+      box-shadow: 2px 2px 5px #aaa;
+      transition: background-color 0.3s;
+    }
+    .btn-download:hover { background-color: #218838; }
   </style>
 </head>
 <body>
-
-  <h1>Monitoring Gerak & Jantung Janin</h1>
-  
-  <div class="card">
-    <h3>Device ID: 20</h3>
-    <p>Total Gerakan:</p>
-    <div class="value" id="gerakVal">0</div>
+  <div class="container">
+    <h1>Monitoring Gerak & Jantung Janin</h1>
+    <h3 style="color: #666;">Device ID: 20</h3>
     
-    <p>Nilai Sensor (BPM):</p>
-    <div class="value" id="sensorVal">0</div>
+    <!-- Tombol Download CSV -->
+    <button class="btn-download" onclick="downloadCSV()">📥 Download Data (CSV)</button>
+    
+    <!-- Kotak Nilai Terbaru -->
+    <div class="card-container">
+      <div class="card">
+        <h4>Total Gerakan (Terbaru)</h4>
+        <div class="value" id="gerakVal">0</div>
+      </div>
+      <div class="card">
+        <h4>Nilai Sensor / BPM (Terbaru)</h4>
+        <div class="value" id="sensorVal">0</div>
+      </div>
+    </div>
+
+    <!-- Area Grafik -->
+    <div class="chart-container">
+      <canvas id="myChart"></canvas>
+    </div>
   </div>
 
   <script>
-    // --- GANTI DENGAN KUNCI FIREBASE ANDA ---
+    // --- 1. KONFIGURASI FIREBASE ---
     var firebaseConfig = {
       apiKey: "AIzaSyCPgchcaIP6ChgIYwtJWJSAPiyc-OKY6ZU", 
-      databaseURL: "https://data-gerak-dan-bpm-janin-default-rtdb.asia-southeast1.firebasedatabase.app" // Ganti dengan URL Database Anda
+      databaseURL: "https://data-gerak-dan-bpm-janin-default-rtdb.asia-southeast1.firebasedatabase.app" // JANGAN LUPA GANTI INI DENGAN URL FIREBASE ANDA
     };
     
-    // Inisialisasi Firebase
     firebase.initializeApp(firebaseConfig);
     var database = firebase.database();
     
-    // Membaca data dari path yang sama dengan ESP32
-    var dataRef = database.ref('Data_Janin/Device_20');
+    // --- Variabel Global untuk menyimpan data yang akan di-download ---
+    var csvData = []; 
     
-    // Fungsi ini akan otomatis berjalan setiap kali ada data baru di Firebase
-    dataRef.on('value', (snapshot) => {
-      var data = snapshot.val();
-      if(data) {
-        document.getElementById('gerakVal').innerText = data.muscleMovements || 0;
-        document.getElementById('sensorVal').innerText = data.sensorValue || 0;
+    // --- 2. PERSIAPAN GRAFIK (CHART.JS) ---
+    var ctx = document.getElementById('myChart').getContext('2d');
+    var myChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [], 
+        datasets: [
+          {
+            label: 'Total Gerakan',
+            borderColor: 'rgb(54, 162, 235)',
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            data: [], 
+            yAxisID: 'y'
+          },
+          {
+            label: 'Nilai Sensor (BPM)',
+            borderColor: 'rgb(255, 99, 132)',
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            data: [], 
+            yAxisID: 'y1'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { title: { display: true, text: 'Waktu Pengukuran' } },
+          y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Total Gerakan' } },
+          y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Nilai Sensor' }, grid: { drawOnChartArea: false } }
+        }
       }
     });
-  </script>
 
+    // --- 3. MENARIK DATA RIWAYAT DARI FIREBASE ---
+    var historyRef = database.ref('Data_Janin/Device_20/History');
+    
+    historyRef.on('value', (snapshot) => {
+      var dataLabels = [];
+      var dataGerakan = [];
+      var dataSensor = [];
+      var latestGerak = 0;
+      var latestSensor = 0;
+
+      // Siapkan baris pertama (Header) untuk file Excel/CSV
+      csvData = [["Tanggal & Waktu", "Total Gerakan", "Nilai Sensor (BPM)"]];
+
+      snapshot.forEach((childSnapshot) => {
+        var childData = childSnapshot.val();
+        
+        var date = new Date(childData.timestamp);
+        // Format jam untuk grafik (contoh: 10:45)
+        var timeString = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+        // Format lengkap untuk file Excel (contoh: 12/09/2024, 10:45:00)
+        var fullDateString = date.toLocaleString('id-ID'); 
+        
+        dataLabels.push(timeString);
+        dataGerakan.push(childData.muscleMovements);
+        dataSensor.push(childData.sensorValue);
+        
+        // Memasukkan data ke dalam variabel array CSV
+        csvData.push([fullDateString, childData.muscleMovements, childData.sensorValue]);
+        
+        latestGerak = childData.muscleMovements;
+        latestSensor = childData.sensorValue;
+      });
+
+      document.getElementById('gerakVal').innerText = latestGerak;
+      document.getElementById('sensorVal').innerText = latestSensor;
+
+      myChart.data.labels = dataLabels;
+      myChart.data.datasets[0].data = dataGerakan;
+      myChart.data.datasets[1].data = dataSensor;
+      myChart.update();
+    });
+
+    // --- 4. FUNGSI UNTUK MENDOWNLOAD CSV ---
+    function downloadCSV() {
+      // Peringatan jika data dari Firebase belum masuk sama sekali
+      if (csvData.length <= 1) {
+        alert("Data masih kosong atau sedang dimuat. Harap tunggu hingga grafik muncul.");
+        return;
+      }
+
+      var csvContent = "";
+      
+      // Menggabungkan array menjadi format text yang dipisahkan koma
+      csvData.forEach(function(rowArray) {
+          var row = rowArray.join(",");
+          csvContent += row + "\r\n";
+      });
+      
+      // Proses konversi dan pembuatan file unduhan
+      var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      var link = document.createElement("a");
+      var url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "Data_Monitoring_Janin_Device20.csv");
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
 </body>
 </html>
