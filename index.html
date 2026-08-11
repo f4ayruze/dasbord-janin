@@ -114,7 +114,7 @@
 
     // --- 3. MENARIK DATA RIWAYAT DARI FIREBASE ---
     // Arahkan ke folder yang benar yaitu 'monitoring'
-    var historyRef = database.ref('monitoring');
+    var historyRef = database.ref('monitoring'). limitToLast(50);
     
     historyRef.on('value', (snapshot) => {
       var dataLabels = [];
