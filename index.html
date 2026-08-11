@@ -1,119 +1,6 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard Monitoring Janin</title>
-  
-  <!-- Library Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-  
-  <!-- Library Grafik (Chart.js) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin: 20px; background-color: #f4f7f6; }
-    .container { max-width: 800px; margin: auto; }
-    .card-container { display: flex; justify-content: space-around; margin-bottom: 20px; gap: 10px; flex-wrap: wrap; }
-    .card { background: white; border-radius: 10px; padding: 20px; width: 40%; box-shadow: 2px 2px 10px #ccc; }
-    h1 { color: #333; margin-bottom: 5px; }
-    .value { font-size: 2.5em; font-weight: bold; color: #007BFF; }
-    .chart-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 2px 2px 10px #ccc; margin-top: 20px; }
-    
-    /* Gaya untuk Tombol Download */
-    .btn-download {
-      background-color: #28a745;
-      color: white;
-      padding: 12px 24px;
-      font-size: 16px;
-      font-weight: bold;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-top: 15px;
-      margin-bottom: 10px;
-      box-shadow: 2px 2px 5px #aaa;
-      transition: background-color 0.3s;
-    }
-    .btn-download:hover { background-color: #218838; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Monitoring Gerak & Jantung Janin</h1>
-    <h3 style="color: #666;">Device ID: 20</h3>
-    
-    <!-- Tombol Download CSV -->
-    <button class="btn-download" onclick="downloadCSV()">📥 Download Data (CSV)</button>
-    
-    <!-- Kotak Nilai Terbaru -->
-    <div class="card-container">
-      <div class="card">
-        <h4>Total Gerakan (Terbaru)</h4>
-        <div class="value" id="gerakVal">0</div>
-      </div>
-      <div class="card">
-        <h4>Nilai Sensor / BPM (Terbaru)</h4>
-        <div class="value" id="sensorVal">0</div>
-      </div>
-    </div>
-
-    <!-- Area Grafik -->
-    <div class="chart-container">
-      <canvas id="myChart"></canvas>
-    </div>
-  </div>
-
-  <script>
-    // --- 1. KONFIGURASI FIREBASE ---
-    var firebaseConfig = {
-      apiKey: "AIzaSyCPgchcaIP6ChgIYwtJWJSAPiyc-OKY6ZU", 
-      databaseURL: "https://data-gerak-dan-bpm-janin-default-rtdb.asia-southeast1.firebasedatabase.app" // JANGAN LUPA GANTI INI DENGAN URL FIREBASE ANDA
-    };
-    
-    firebase.initializeApp(firebaseConfig);
-    var database = firebase.database();
-    
-    // --- Variabel Global untuk menyimpan data yang akan di-download ---
-    var csvData = []; 
-    
-    // --- 2. PERSIAPAN GRAFIK (CHART.JS) ---
-    var ctx = document.getElementById('myChart').getContext('2d');
-    var myChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: [], 
-        datasets: [
-          {
-            label: 'Total Gerakan',
-            borderColor: 'rgb(54, 162, 235)',
-            backgroundColor: 'rgba(54, 162, 235, 0.2)',
-            data: [], 
-            yAxisID: 'y'
-          },
-          {
-            label: 'Nilai Sensor (BPM)',
-            borderColor: 'rgb(255, 99, 132)',
-            backgroundColor: 'rgba(255, 99, 132, 0.2)',
-            data: [], 
-            yAxisID: 'y1'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-          x: { title: { display: true, text: 'Waktu Pengukuran' } },
-          y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Total Gerakan' } },
-          y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Nilai Sensor' }, grid: { drawOnChartArea: false } }
-        }
-      }
-    });
-
-    // --- 3. MENARIK DATA RIWAYAT DARI FIREBASE ---
-    var historyRef = database.ref('Data_Janin/Device_20/History');
+// --- 3. MENARIK DATA RIWAYAT DARI FIREBASE ---
+    // UBAH 1: Arahkan ke folder yang benar yaitu 'monitoring'
+    var historyRef = database.ref('monitoring');
     
     historyRef.on('value', (snapshot) => {
       var dataLabels = [];
@@ -135,14 +22,16 @@
         var fullDateString = date.toLocaleString('id-ID'); 
         
         dataLabels.push(timeString);
-        dataGerakan.push(childData.muscleMovements);
-        dataSensor.push(childData.sensorValue);
+        
+        // UBAH 2: Samakan nama variabel dengan yang dikirim ESP32 (gerakan & bpm)
+        dataGerakan.push(childData.gerakan);
+        dataSensor.push(childData.bpm);
         
         // Memasukkan data ke dalam variabel array CSV
-        csvData.push([fullDateString, childData.muscleMovements, childData.sensorValue]);
+        csvData.push([fullDateString, childData.gerakan, childData.bpm]);
         
-        latestGerak = childData.muscleMovements;
-        latestSensor = childData.sensorValue;
+        latestGerak = childData.gerakan;
+        latestSensor = childData.bpm;
       });
 
       document.getElementById('gerakVal').innerText = latestGerak;
@@ -183,5 +72,3 @@
       document.body.removeChild(link);
     }
   </script>
-</body>
-</html>
