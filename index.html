@@ -37,6 +37,24 @@
       transition: background-color 0.3s;
     }
     .btn-download:hover { background-color: #218838; }
+
+    /* Gaya untuk Tombol Reset */
+    .btn-reset {
+      background-color: #dc3545;
+      color: white;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 15px;
+      margin-bottom: 10px;
+      margin-left: 10px;
+      box-shadow: 2px 2px 5px #aaa;
+      transition: background-color 0.3s;
+    }
+    .btn-reset:hover { background-color: #c82333; }
   </style>
 </head>
 <body>
@@ -44,8 +62,11 @@
     <h1>Monitoring Gerak & Jantung Janin</h1>
     <h3 style="color: #666;">Device ID: 20</h3>
     
-    <!-- Tombol Download CSV -->
-    <button class="btn-download" onclick="downloadCSV()">📥 Download Data (CSV)</button>
+    <!-- Tombol Aksi -->
+    <div>
+      <button class="btn-download" onclick="downloadCSV()">📥 Download Data (CSV)</button>
+      <button class="btn-reset" onclick="resetData()">🗑️ Reset Data</button>
+    </div>
     
     <!-- Kotak Nilai Terbaru -->
     <div class="card-container">
@@ -75,7 +96,7 @@
     firebase.initializeApp(firebaseConfig);
     var database = firebase.database();
     
-    // --- Variabel Global untuk menyimpan data yang akan di-download ---
+    // --- Variabel Global ---
     var csvData = []; 
     
     // --- 2. PERSIAPAN GRAFIK (CHART.JS) ---
@@ -113,8 +134,8 @@
     });
 
     // --- 3. MENARIK DATA RIWAYAT DARI FIREBASE ---
-    // Arahkan ke folder yang benar yaitu 'monitoring'
-    var historyRef = database.ref('monitoring'). limitToLast(50);
+    // Batasan .limitToLast(50) dihapus agar data tertampil semua (unlimited)
+    var historyRef = database.ref('monitoring');
     
     historyRef.on('value', (snapshot) => {
       var dataLabels = [];
@@ -123,31 +144,29 @@
       var latestGerak = 0;
       var latestSensor = 0;
 
-      // Siapkan baris pertama (Header) untuk file Excel/CSV
       csvData = [["Tanggal & Waktu", "Total Gerakan", "Nilai Sensor (BPM)"]];
 
-      snapshot.forEach((childSnapshot) => {
-        var childData = childSnapshot.val();
-        
-        var date = new Date(childData.timestamp);
-        // Format jam untuk grafik (contoh: 10:45)
-        var timeString = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
-        // Format lengkap untuk file Excel (contoh: 12/09/2024, 10:45:00)
-        var fullDateString = date.toLocaleString('id-ID'); 
-        
-        dataLabels.push(timeString);
-        
-        // Samakan nama variabel dengan yang dikirim ESP32 (gerakan & bpm)
-        dataGerakan.push(childData.gerakan);
-        dataSensor.push(childData.bpm);
-        
-        // Memasukkan data ke dalam variabel array CSV
-        csvData.push([fullDateString, childData.gerakan, childData.bpm]);
-        
-        latestGerak = childData.gerakan;
-        latestSensor = childData.bpm;
-      });
+      // Mengecek apakah data ada (mencegah error saat database dikosongkan)
+      if (snapshot.exists()) {
+        snapshot.forEach((childSnapshot) => {
+          var childData = childSnapshot.val();
+          
+          var date = new Date(childData.timestamp);
+          var timeString = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+          var fullDateString = date.toLocaleString('id-ID'); 
+          
+          dataLabels.push(timeString);
+          dataGerakan.push(childData.gerakan);
+          dataSensor.push(childData.bpm);
+          
+          csvData.push([fullDateString, childData.gerakan, childData.bpm]);
+          
+          latestGerak = childData.gerakan;
+          latestSensor = childData.bpm;
+        });
+      }
 
+      // Memperbarui UI
       document.getElementById('gerakVal').innerText = latestGerak;
       document.getElementById('sensorVal').innerText = latestSensor;
 
@@ -159,31 +178,44 @@
 
     // --- 4. FUNGSI UNTUK MENDOWNLOAD CSV ---
     function downloadCSV() {
-      // Peringatan jika data dari Firebase belum masuk sama sekali
       if (csvData.length <= 1) {
         alert("Data masih kosong atau sedang dimuat. Harap tunggu hingga grafik muncul.");
         return;
       }
 
       var csvContent = "";
-      
-      // Menggabungkan array menjadi format text yang dipisahkan koma
       csvData.forEach(function(rowArray) {
           var row = rowArray.join(",");
           csvContent += row + "\r\n";
       });
       
-      // Proses konversi dan pembuatan file unduhan
       var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       var link = document.createElement("a");
       var url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
-      link.setAttribute("download", "Data_Monitoring_Janin_Device20.csv");
+      link.setAttribute("download", "Data_Monitoring_Janin.csv");
       link.style.visibility = 'hidden';
       
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+    }
+
+    // --- 5. FUNGSI UNTUK MERESET DATA FIREBASE ---
+    function resetData() {
+      // Memunculkan kotak konfirmasi agar tidak terhapus secara tidak sengaja
+      var konfirmasi = confirm("⚠️ PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA data pemantauan?\n\nData yang sudah dihapus tidak dapat dikembalikan.");
+      
+      if (konfirmasi) {
+        // Menghapus node 'monitoring' dari Firebase
+        database.ref('monitoring').remove()
+          .then(function() {
+            alert("✅ Data berhasil direset!");
+          })
+          .catch(function(error) {
+            alert("❌ Gagal mereset data: " + error.message);
+          });
+      }
     }
   </script>
 </body>
